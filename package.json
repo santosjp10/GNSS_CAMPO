@@ -1,0 +1,21 @@
+{
+  "name": "gnss-campo",
+  "version": "1.0.0",
+  "description": "Levantamento geoespacial de campo via GNSS (GPS interno + receptor externo Bluetooth/NMEA)",
+  "private": true,
+  "scripts": {
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/geolocation": "^6.0.1",
+    "@capacitor/filesystem": "^6.0.1",
+    "@capacitor/share": "^6.0.2",
+    "@capacitor-community/bluetooth-le": "^6.0.1",
+    "cordova-plugin-bluetooth-serial": "^0.4.7"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}

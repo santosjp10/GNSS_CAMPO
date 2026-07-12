@@ -1,0 +1,14 @@
+{
+  "appId": "br.edu.uft.gnsscampo",
+  "appName": "GNSS Campo",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "Geolocation": {
+      "permissions": ["location"]
+    }
+  }
+}

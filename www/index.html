@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>GNSS Campo</title>
+<link rel="stylesheet" href="libs/leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <h1 id="topTitle">Coletar</h1>
+    <div class="gnss-badge" id="gnssBadge">
+      <span class="gnss-dot"></span><span id="gnssBadgeText">Sem sinal</span>
+    </div>
+  </div>
+
+  <!-- VIEW: Coletar -->
+  <div class="view active" id="view-coletar">
+    <div class="mode-switch">
+      <div class="mode-opt active" data-mode="point">Ponto</div>
+      <div class="mode-opt" data-mode="line">Linha</div>
+      <div class="mode-opt" data-mode="polygon">Polígono</div>
+    </div>
+
+    <div class="card">
+      <div class="pos-grid">
+        <div class="pos-box"><div class="v" id="posAccuracy">--</div><div class="l">Precisão (m)</div></div>
+        <div class="pos-box"><div class="v" id="posSats">--</div><div class="l">Satélites</div></div>
+      </div>
+      <div class="coord-line"><span class="cl-label">Latitude</span><span class="cl-val" id="posLat">--</span></div>
+      <div class="coord-line"><span class="cl-label">Longitude</span><span class="cl-val" id="posLng">--</span></div>
+      <div class="coord-line"><span class="cl-label">UTM</span><span class="cl-val" id="posUtm">--</span></div>
+      <div class="coord-line"><span class="cl-label">Altitude</span><span class="cl-val" id="posAlt">--</span></div>
+      <div class="coord-line"><span class="cl-label">Fonte GNSS</span><span class="cl-val" id="posSource">GPS interno</span></div>
+    </div>
+
+    <!-- Linha / Polígono: lista de vértices -->
+    <div id="vertexSection" class="hidden">
+      <div class="stat-strip">
+        <div class="stat-chip"><div class="n" id="vertexCount">0</div><div class="l">Vértices</div></div>
+        <div class="stat-chip"><div class="n" id="vertexMeasure">0 m</div><div class="l" id="vertexMeasureLabel">Comprimento</div></div>
+      </div>
+      <div class="vertex-list" id="vertexList"></div>
+      <div class="btn-row" style="margin-bottom:12px">
+        <button class="btn btn-ghost btn-sm" id="btnUndo">Desfazer último</button>
+        <button class="btn btn-ghost btn-sm" id="btnCancelDraft">Cancelar</button>
+      </div>
+    </div>
+
+    <div class="card" id="metaCard">
+      <p class="card-title">Dados da feição</p>
+      <div class="field">
+        <label>Nome</label>
+        <input type="text" id="fName" placeholder="Ex.: Talhão 03, Poço, Nascente...">
+      </div>
+      <div class="field">
+        <label>Categoria</label>
+        <select id="fCategory">
+          <option value="Agricultura">Agricultura</option>
+          <option value="Solo">Solo</option>
+          <option value="Hidrografia">Hidrografia</option>
+          <option value="Vegetação">Vegetação</option>
+          <option value="Infraestrutura">Infraestrutura</option>
+          <option value="Limite/Divisa">Limite/Divisa</option>
+          <option value="Outro">Outro</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Observações</label>
+        <textarea id="fNotes" placeholder="Opcional"></textarea>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btnCapture">Marcar ponto aqui</button>
+  </div>
+
+  <!-- VIEW: Mapa -->
+  <div class="view nopad" id="view-mapa" style="position:relative;">
+    <div id="map"></div>
+    <div class="offline-banner" id="offlineBanner">Tiles em cache: <b id="tileCount">0</b></div>
+    <div class="map-controls">
+      <button class="map-fab active" id="btnLayerSat" title="Satélite">🛰️</button>
+      <button class="map-fab" id="btnLayerStreets" title="Ruas">🗺️</button>
+      <button class="map-fab" id="btnFitAll" title="Ver tudo">⛶</button>
+    </div>
+    <button class="map-fab map-locate" id="btnLocate" title="Minha posição">📍</button>
+  </div>
+
+  <!-- VIEW: Dados -->
+  <div class="view" id="view-dados">
+    <div class="stat-strip">
+      <div class="stat-chip"><div class="n" id="countPoints">0</div><div class="l">Pontos</div></div>
+      <div class="stat-chip"><div class="n" id="countLines">0</div><div class="l">Linhas</div></div>
+      <div class="stat-chip"><div class="n" id="countPolygons">0</div><div class="l">Polígonos</div></div>
+    </div>
+    <div id="featList"></div>
+    <button class="btn btn-danger" id="btnClearAll" style="margin-top:8px">Apagar tudo</button>
+  </div>
+
+  <!-- VIEW: Exportar -->
+  <div class="view" id="view-exportar">
+    <p class="section-label">Formatos disponíveis</p>
+    <div class="export-grid">
+      <button class="export-btn" data-fmt="geojson"><span class="ic">🗂️</span>GeoJSON</button>
+      <button class="export-btn" data-fmt="kml"><span class="ic">🌍</span>KML</button>
+      <button class="export-btn" data-fmt="kmz"><span class="ic">🗺️</span>KMZ</button>
+      <button class="export-btn" data-fmt="shp"><span class="ic">📐</span>Shapefile</button>
+      <button class="export-btn" data-fmt="csv"><span class="ic">📊</span>CSV</button>
+      <button class="export-btn" data-fmt="gpx"><span class="ic">📡</span>GPX</button>
+    </div>
+    <p class="section-label">Resumo</p>
+    <div class="card">
+      <div class="coord-line"><span class="cl-label">Total de feições</span><span class="cl-val" id="expTotal">0</span></div>
+      <div class="coord-line"><span class="cl-label">Pontos</span><span class="cl-val" id="expPoints">0</span></div>
+      <div class="coord-line"><span class="cl-label">Linhas</span><span class="cl-val" id="expLines">0</span></div>
+      <div class="coord-line"><span class="cl-label">Polígonos</span><span class="cl-val" id="expPolygons">0</span></div>
+    </div>
+  </div>
+
+  <!-- VIEW: Config -->
+  <div class="view" id="view-config">
+    <p class="section-label">Projeto</p>
+    <div class="card">
+      <div class="field"><label>Nome do projeto</label><input type="text" id="cfgProject" placeholder="Ex.: Levantamento Fazenda X"></div>
+      <div class="field" style="margin-bottom:0"><label>Operador</label><input type="text" id="cfgOperator" placeholder="Seu nome"></div>
+    </div>
+
+    <p class="section-label">Fonte GNSS</p>
+    <div class="card">
+      <div class="switch-row">
+        <div><div class="sr-t">GPS interno do celular</div><div class="sr-s">Usa o sensor do próprio aparelho</div></div>
+        <div class="switch on" id="swInternal" data-src="internal"><div class="knob"></div></div>
+      </div>
+      <div class="switch-row">
+        <div><div class="sr-t">Receptor externo (Bluetooth)</div><div class="sr-s">RTK/GNSS via NMEA 0183</div></div>
+        <div class="switch" id="swBluetooth" data-src="bluetooth"><div class="knob"></div></div>
+      </div>
+      <div id="btDeviceSection" class="hidden" style="margin-top:10px">
+        <div class="field" style="margin-bottom:8px">
+          <label>Dispositivo pareado</label>
+          <select id="btDeviceList"><option value="">Toque em "Buscar dispositivos"</option></select>
+        </div>
+        <button class="btn btn-outline btn-sm" id="btnBtScan">Buscar dispositivos pareados</button>
+        <button class="btn btn-primary btn-sm" id="btnBtConnect" style="margin-top:8px">Conectar</button>
+      </div>
+    </div>
+
+    <p class="section-label">Qualidade</p>
+    <div class="card">
+      <div class="field" style="margin-bottom:0">
+        <label>Alerta de precisão pior que (m)</label>
+        <input type="number" id="cfgMinAccuracy" step="1" min="1">
+      </div>
+    </div>
+
+    <p class="section-label">Mapa offline</p>
+    <div class="card">
+      <div class="coord-line"><span class="cl-label">Tiles salvos no dispositivo</span><span class="cl-val" id="cfgTileCount">0</span></div>
+      <button class="btn btn-ghost btn-sm" id="btnClearTiles" style="margin-top:10px">Limpar cache de mapa</button>
+    </div>
+
+    <p class="section-label">Sobre</p>
+    <div class="card">
+      <p style="font-size:13px;color:var(--muted);margin:0;line-height:1.5;">
+        GNSS Campo v1.0 — Coleta de dados geoespaciais em campo (pontos, linhas e polígonos),
+        com exportação para GeoJSON, KML, KMZ, Shapefile, CSV e GPX. Funciona offline após o
+        primeiro carregamento do mapa da área.
+      </p>
+    </div>
+  </div>
+
+  <!-- Tabbar -->
+  <div class="tabbar">
+    <button class="tab-btn active" data-view="coletar">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/><line x1="12" y1="1.5" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22.5"/><line x1="1.5" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22.5" y2="12"/></svg>
+      Coletar
+    </button>
+    <button class="tab-btn" data-view="mapa">
+      <svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-11.5A7 7 0 0 1 19 9.5C19 14.5 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
+      Mapa
+    </button>
+    <button class="tab-btn" data-view="dados">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><line x1="3.5" y1="9.5" x2="20.5" y2="9.5"/><line x1="8" y1="9.5" x2="8" y2="20"/></svg>
+      Dados
+    </button>
+    <button class="tab-btn" data-view="exportar">
+      <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19.5h16"/></svg>
+      Exportar
+    </button>
+    <button class="tab-btn" data-view="config">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10a1.7 1.7 0 0 0 1-1.55V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10a1.7 1.7 0 0 0 1.55 1H20a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
+      Config
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="libs/leaflet.js"></script>
+<script src="libs/jszip.min.js"></script>
+<script src="libs/shpwrite.js"></script>
+<script src="js/geometry.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/gnss.js"></script>
+<script src="js/map.js"></script>
+<script src="js/exporters.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
