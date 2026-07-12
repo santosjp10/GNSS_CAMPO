@@ -89,10 +89,12 @@
     <div class="map-collect-info hidden" id="mapCollectInfo">
       <span id="mapCollectCount">0</span> vértices · <span id="mapCollectMeasure">0 m</span>
     </div>
+    <div class="map-edit-hint hidden" id="mapEditHint">✏️ Edição ativa: toque no mapa para inserir · arraste um ponto para mover</div>
     <div class="map-controls">
       <button class="map-fab active" id="btnLayerSat" title="Satélite">🛰️</button>
       <button class="map-fab" id="btnLayerStreets" title="Ruas">🗺️</button>
       <button class="map-fab" id="btnFitAll" title="Ver tudo">⛶</button>
+      <button class="map-fab" id="btnMapEdit" title="Editar no mapa (toque para inserir, arraste para mover)">✏️</button>
     </div>
     <button class="map-fab map-locate" id="btnLocate" title="Minha posição">📍</button>
 
@@ -116,6 +118,15 @@
 
   <!-- VIEW: Exportar -->
   <div class="view" id="view-exportar">
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;margin-top:0">
+      <span>Feições a exportar</span>
+      <span>
+        <button class="btn-link" id="btnSelectAll">Todas</button> ·
+        <button class="btn-link" id="btnSelectNone">Nenhuma</button>
+      </span>
+    </div>
+    <div id="exportFeatList" class="card" style="padding:6px 8px"></div>
+
     <p class="section-label">Formatos disponíveis</p>
     <div class="export-grid">
       <button class="export-btn" data-fmt="geojson"><span class="ic">🗂️</span>GeoJSON</button>
@@ -125,9 +136,9 @@
       <button class="export-btn" data-fmt="csv"><span class="ic">📊</span>CSV</button>
       <button class="export-btn" data-fmt="gpx"><span class="ic">📡</span>GPX</button>
     </div>
-    <p class="section-label">Resumo</p>
+    <p class="section-label">Resumo da seleção</p>
     <div class="card">
-      <div class="coord-line"><span class="cl-label">Total de feições</span><span class="cl-val" id="expTotal">0</span></div>
+      <div class="coord-line"><span class="cl-label">Selecionadas</span><span class="cl-val" id="expTotal">0</span></div>
       <div class="coord-line"><span class="cl-label">Pontos</span><span class="cl-val" id="expPoints">0</span></div>
       <div class="coord-line"><span class="cl-label">Linhas</span><span class="cl-val" id="expLines">0</span></div>
       <div class="coord-line"><span class="cl-label">Polígonos</span><span class="cl-val" id="expPolygons">0</span></div>

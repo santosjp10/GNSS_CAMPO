@@ -27,7 +27,12 @@
     document.getElementById('topTitle').textContent = TAB_TITLES[name];
 
     if (name === 'mapa') {
-      if (!mapInited) { MapModule.init('map'); mapInited = true; refreshTileCount(); }
+      if (!mapInited) {
+        MapModule.init('map');
+        mapInited = true;
+        refreshTileCount();
+        MapModule.getMap().on('click', onMapClickInsert);
+      }
       setTimeout(() => { MapModule.invalidateSize(); MapModule.drawAll(features); MapModule.updateDraft(mode, draft); }, 50);
       document.getElementById('mapModeBadge').textContent = 'Modo: ' + MODE_LABELS[mode];
       document.getElementById('mapCollectInfo').classList.toggle('hidden', mode === 'point' || !draft.length);
@@ -333,24 +338,69 @@
   function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
   // ---------- Aba Exportar ----------
+  let selectedExportIds = new Set();
+  let knownExportIds = new Set();
+
   function renderExportSummary() {
-    document.getElementById('expTotal').textContent = features.length;
-    document.getElementById('expPoints').textContent = features.filter(f => f.type === 'point').length;
-    document.getElementById('expLines').textContent = features.filter(f => f.type === 'line').length;
-    document.getElementById('expPolygons').textContent = features.filter(f => f.type === 'polygon').length;
+    const currentIds = new Set(features.map(f => f.id));
+    // feições novas entram selecionadas por padrão
+    for (const id of currentIds) if (!knownExportIds.has(id)) { selectedExportIds.add(id); knownExportIds.add(id); }
+    // feições removidas saem do controle de seleção
+    for (const id of [...knownExportIds]) if (!currentIds.has(id)) { knownExportIds.delete(id); selectedExportIds.delete(id); }
+
+    const listEl = document.getElementById('exportFeatList');
+    if (!features.length) {
+      listEl.innerHTML = `<div class="empty" style="padding:20px 10px"><div class="ic">📭</div><p>Nenhuma feição coletada ainda.</p></div>`;
+    } else {
+      const icon = { point: '📍', line: '📏', polygon: '⬟' };
+      listEl.innerHTML = features.slice().reverse().map(f => {
+        const meta = f.type === 'point' ? (f.category || '-')
+          : f.type === 'line' ? Geometry.fmtDist(f.length_m || 0)
+          : Geometry.fmtArea(f.area_m2 || 0);
+        const checked = selectedExportIds.has(f.id);
+        return `<div class="export-feat-item" data-id="${f.id}">
+          <div class="export-checkbox ${checked ? 'checked' : ''}">${checked ? '✓' : ''}</div>
+          <div class="efi-icon">${icon[f.type]}</div>
+          <div class="efi-body"><div class="efi-name">${escapeHtml(f.name)}</div><div class="efi-meta">${meta}</div></div>
+        </div>`;
+      }).join('');
+      listEl.querySelectorAll('.export-feat-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const id = item.dataset.id;
+          if (selectedExportIds.has(id)) selectedExportIds.delete(id); else selectedExportIds.add(id);
+          renderExportSummary();
+        });
+      });
+    }
+
+    const selected = features.filter(f => selectedExportIds.has(f.id));
+    document.getElementById('expTotal').textContent = selected.length;
+    document.getElementById('expPoints').textContent = selected.filter(f => f.type === 'point').length;
+    document.getElementById('expLines').textContent = selected.filter(f => f.type === 'line').length;
+    document.getElementById('expPolygons').textContent = selected.filter(f => f.type === 'polygon').length;
   }
+  document.getElementById('btnSelectAll').addEventListener('click', () => {
+    selectedExportIds = new Set(features.map(f => f.id));
+    renderExportSummary();
+  });
+  document.getElementById('btnSelectNone').addEventListener('click', () => {
+    selectedExportIds = new Set();
+    renderExportSummary();
+  });
+
   document.querySelectorAll('.export-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!features.length) { toast('Nenhuma feição para exportar', 'error'); return; }
+      const selected = features.filter(f => selectedExportIds.has(f.id));
+      if (!selected.length) { toast('Selecione ao menos uma feição para exportar', 'error'); return; }
       const fmt = btn.dataset.fmt;
       toast('Gerando arquivo...');
       try {
-        if (fmt === 'geojson') await Exporters.exportGeoJSON(features);
-        else if (fmt === 'kml') await Exporters.exportKML(features);
-        else if (fmt === 'kmz') await Exporters.exportKMZ(features);
-        else if (fmt === 'csv') await Exporters.exportCSV(features);
-        else if (fmt === 'gpx') await Exporters.exportGPX(features);
-        else if (fmt === 'shp') await Exporters.exportSHP(features);
+        if (fmt === 'geojson') await Exporters.exportGeoJSON(selected);
+        else if (fmt === 'kml') await Exporters.exportKML(selected);
+        else if (fmt === 'kmz') await Exporters.exportKMZ(selected);
+        else if (fmt === 'csv') await Exporters.exportCSV(selected);
+        else if (fmt === 'gpx') await Exporters.exportGPX(selected);
+        else if (fmt === 'shp') await Exporters.exportSHP(selected);
         toast('Arquivo pronto para compartilhar/salvar', 'success');
       } catch (e) {
         console.error(e);
@@ -373,6 +423,50 @@
     MapModule.fitAll(features);
   });
   document.getElementById('btnLocate').addEventListener('click', () => MapModule.centerOnPosition(GNSS.getLast()));
+
+  // ---------- Edição direta no mapa (inserir por toque / mover por arraste) ----------
+  let mapEditMode = false;
+  document.getElementById('btnMapEdit').addEventListener('click', () => {
+    mapEditMode = !mapEditMode;
+    document.getElementById('btnMapEdit').classList.toggle('active', mapEditMode);
+    document.getElementById('mapEditHint').classList.toggle('hidden', !mapEditMode);
+    MapModule.setEditable(mapEditMode, handleVertexMoved);
+    MapModule.drawAll(features);
+    MapModule.updateDraft(mode, draft);
+    toast(mapEditMode ? 'Edição no mapa ativada' : 'Edição no mapa desativada');
+  });
+
+  function onMapClickInsert(e) {
+    if (!mapEditMode) return;
+    const coord = { lat: e.latlng.lat, lng: e.latlng.lng, alt: null, accuracy: null, source: 'manual' };
+    if (mode === 'point') {
+      saveFeature('point', [coord]);
+      toast('Ponto inserido manualmente', 'success');
+    } else {
+      draft.push(coord);
+      renderDraft();
+      toast(`Vértice ${draft.length} inserido manualmente`, 'success');
+    }
+  }
+
+  // Chamado quando o usuário arrasta um vértice de uma feição já salva (featureId) para uma nova posição.
+  function handleVertexMoved(featureId, vertexIndex, newLatLng) {
+    if (!featureId) return; // vértice do rascunho — já foi atualizado internamente pelo map.js
+    const list = Storage.getFeatures();
+    const f = list.find(x => x.id === featureId);
+    if (!f) return;
+    f.coords[vertexIndex] = { ...f.coords[vertexIndex], lat: newLatLng.lat, lng: newLatLng.lng };
+    if (f.type === 'line') f.length_m = Geometry.lineLength(f.coords);
+    if (f.type === 'polygon') {
+      const a = Geometry.polygonArea(f.coords);
+      f.area_m2 = a.area_m2; f.area_ha = a.area_ha; f.perimeter_m = a.perimeter_m; f.utm_zone = a.zone;
+    }
+    Storage.saveFeatures(list);
+    features = list;
+    toast('Posição atualizada', 'success');
+    if (currentView === 'dados') renderFeatureList();
+    if (currentView === 'exportar') renderExportSummary();
+  }
   async function refreshTileCount() {
     const n = await MapModule.tileCacheCount();
     document.getElementById('tileCount').textContent = n;

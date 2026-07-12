@@ -1,6 +1,8 @@
 // map.js — mapa Leaflet com camadas satélite/ruas e cache de tiles offline (IndexedDB)
 const MapModule = (() => {
   let map, posMarker, posAccuracyCircle, layerGroup, draftLayerGroup, currentBase;
+  let editable = false;
+  let onVertexMoved = null; // callback(featureId, vertexIndex, {lat,lng})
   let dbPromise;
   const DB_NAME = 'gnsscampo_tiles';
   const STORE = 'tiles';
@@ -123,50 +125,115 @@ const MapModule = (() => {
 
   function clearFeatures() { layerGroup.clearLayers(); }
 
-  // Desenha em tempo real a feição que está sendo coletada (mode: 'point'|'line'|'polygon', coords: [{lat,lng}])
+  function setEditable(flag, cb) {
+    editable = flag;
+    onVertexMoved = cb || null;
+  }
+
+  function vertexIcon(color) {
+    return L.divIcon({
+      className: '',
+      html: `<div style="width:16px;height:16px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.45)"></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+  }
+
+  // Desenha em tempo real a feição que está sendo coletada (mode: 'point'|'line'|'polygon', coords: [{lat,lng}] — array mutável)
   function updateDraft(mode, coords) {
     if (!draftLayerGroup) return;
     draftLayerGroup.clearLayers();
     if (!coords || !coords.length || mode === 'point') return;
 
     const latlngs = coords.map(c => [c.lat, c.lng]);
-
-    // vértices
-    latlngs.forEach((ll, i) => {
-      L.circleMarker(ll, {
-        radius: 5.5, color: '#fff', weight: 2,
-        fillColor: i === 0 ? '#c2410c' : '#0f7ea3', fillOpacity: 1
-      }).addTo(draftLayerGroup);
-    });
+    let shape = null, closing = null, fill = null;
 
     if (mode === 'line') {
-      L.polyline(latlngs, { color: '#0f7ea3', weight: 4, dashArray: '2 6' }).addTo(draftLayerGroup);
+      shape = L.polyline(latlngs, { color: '#0f7ea3', weight: 4, dashArray: '2 6' }).addTo(draftLayerGroup);
     } else if (mode === 'polygon') {
-      if (latlngs.length >= 2) {
-        L.polyline(latlngs, { color: '#c2410c', weight: 3 }).addTo(draftLayerGroup);
-      }
+      if (latlngs.length >= 2) shape = L.polyline(latlngs, { color: '#c2410c', weight: 3 }).addTo(draftLayerGroup);
       if (latlngs.length >= 3) {
-        // prévia do fechamento do polígono (linha tracejada até o primeiro vértice) + preenchimento
-        L.polyline([latlngs[latlngs.length - 1], latlngs[0]], { color: '#c2410c', weight: 2, dashArray: '4 6' }).addTo(draftLayerGroup);
-        L.polygon(latlngs, { color: '#c2410c', weight: 0, fillOpacity: 0.16 }).addTo(draftLayerGroup);
+        closing = L.polyline([latlngs[latlngs.length - 1], latlngs[0]], { color: '#c2410c', weight: 2, dashArray: '4 6' }).addTo(draftLayerGroup);
+        fill = L.polygon(latlngs, { color: '#c2410c', weight: 0, fillOpacity: 0.16 }).addTo(draftLayerGroup);
       }
     }
+
+    coords.forEach((c, i) => {
+      const color = i === 0 ? '#c2410c' : '#0f7ea3';
+      if (editable) {
+        const m = L.marker([c.lat, c.lng], { icon: vertexIcon(color), draggable: true }).addTo(draftLayerGroup);
+        m.on('drag', () => {
+          const p = m.getLatLng();
+          const live = coords.map((cc, ii) => ii === i ? [p.lat, p.lng] : [cc.lat, cc.lng]);
+          if (mode === 'line' && shape) {
+            shape.setLatLngs(live);
+          } else if (mode === 'polygon') {
+            if (shape) shape.setLatLngs(live);
+            if (closing) closing.setLatLngs([live[live.length - 1], live[0]]);
+            if (fill) fill.setLatLngs(live);
+          }
+        });
+        m.on('dragend', () => {
+          const p = m.getLatLng();
+          coords[i].lat = p.lat; coords[i].lng = p.lng;
+          if (onVertexMoved) onVertexMoved(null, i, { lat: p.lat, lng: p.lng });
+        });
+      } else {
+        L.circleMarker([c.lat, c.lng], { radius: 5.5, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).addTo(draftLayerGroup);
+      }
+    });
   }
 
   function clearDraft() { if (draftLayerGroup) draftLayerGroup.clearLayers(); }
 
   function drawFeature(f) {
     if (f.type === 'point') {
-      L.circleMarker([f.coords[0].lat, f.coords[0].lng], { radius: 6, color: '#1f7a52', weight: 2, fillColor: '#e3f3ec', fillOpacity: 1 })
-        .bindPopup(`<b>${escapeHtml(f.name)}</b><br>${f.category || ''}`).addTo(layerGroup);
+      const ll = [f.coords[0].lat, f.coords[0].lng];
+      if (editable) {
+        const m = L.marker(ll, { icon: vertexIcon('#1f7a52'), draggable: true })
+          .bindPopup(`<b>${escapeHtml(f.name)}</b><br>${f.category || ''}`).addTo(layerGroup);
+        m.on('dragend', () => {
+          const p = m.getLatLng();
+          if (onVertexMoved) onVertexMoved(f.id, 0, { lat: p.lat, lng: p.lng });
+        });
+      } else {
+        L.circleMarker(ll, { radius: 6, color: '#1f7a52', weight: 2, fillColor: '#e3f3ec', fillOpacity: 1 })
+          .bindPopup(`<b>${escapeHtml(f.name)}</b><br>${f.category || ''}`).addTo(layerGroup);
+      }
     } else if (f.type === 'line') {
       const latlngs = f.coords.map(c => [c.lat, c.lng]);
-      L.polyline(latlngs, { color: '#0f7ea3', weight: 4 })
+      const line = L.polyline(latlngs, { color: '#0f7ea3', weight: 4 })
         .bindPopup(`<b>${escapeHtml(f.name)}</b><br>${Geometry.fmtDist(f.length_m || 0)}`).addTo(layerGroup);
+      if (editable) {
+        f.coords.forEach((c, i) => {
+          const m = L.marker([c.lat, c.lng], { icon: vertexIcon('#0f7ea3'), draggable: true }).addTo(layerGroup);
+          m.on('drag', () => {
+            const p = m.getLatLng();
+            const ll2 = line.getLatLngs(); ll2[i] = p; line.setLatLngs(ll2);
+          });
+          m.on('dragend', () => {
+            const p = m.getLatLng();
+            if (onVertexMoved) onVertexMoved(f.id, i, { lat: p.lat, lng: p.lng });
+          });
+        });
+      }
     } else if (f.type === 'polygon') {
       const latlngs = f.coords.map(c => [c.lat, c.lng]);
-      L.polygon(latlngs, { color: '#c2410c', weight: 3, fillOpacity: 0.18 })
+      const poly = L.polygon(latlngs, { color: '#c2410c', weight: 3, fillOpacity: 0.18 })
         .bindPopup(`<b>${escapeHtml(f.name)}</b><br>${Geometry.fmtArea(f.area_m2 || 0)}`).addTo(layerGroup);
+      if (editable) {
+        f.coords.forEach((c, i) => {
+          const m = L.marker([c.lat, c.lng], { icon: vertexIcon('#c2410c'), draggable: true }).addTo(layerGroup);
+          m.on('drag', () => {
+            const p = m.getLatLng();
+            const ring = poly.getLatLngs()[0]; ring[i] = p; poly.setLatLngs([ring]);
+          });
+          m.on('dragend', () => {
+            const p = m.getLatLng();
+            if (onVertexMoved) onVertexMoved(f.id, i, { lat: p.lat, lng: p.lng });
+          });
+        });
+      }
     }
   }
 
@@ -189,7 +256,7 @@ const MapModule = (() => {
 
   return {
     init, setBaseLayer, updatePosition, centerOnPosition, drawAll, clearFeatures,
-    updateDraft, clearDraft,
+    updateDraft, clearDraft, setEditable,
     fitAll, invalidateSize, tileCacheCount, clearTileCache, getMap: () => map
   };
 })();
