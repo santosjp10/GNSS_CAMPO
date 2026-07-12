@@ -85,12 +85,22 @@
   <div class="view nopad" id="view-mapa" style="position:relative;">
     <div id="map"></div>
     <div class="offline-banner" id="offlineBanner">Tiles em cache: <b id="tileCount">0</b></div>
+    <div class="map-mode-badge" id="mapModeBadge">Modo: Ponto</div>
+    <div class="map-collect-info hidden" id="mapCollectInfo">
+      <span id="mapCollectCount">0</span> vértices · <span id="mapCollectMeasure">0 m</span>
+    </div>
     <div class="map-controls">
       <button class="map-fab active" id="btnLayerSat" title="Satélite">🛰️</button>
       <button class="map-fab" id="btnLayerStreets" title="Ruas">🗺️</button>
       <button class="map-fab" id="btnFitAll" title="Ver tudo">⛶</button>
     </div>
     <button class="map-fab map-locate" id="btnLocate" title="Minha posição">📍</button>
+
+    <div class="map-collect-controls">
+      <button class="map-fab hidden" id="btnMapFinish" title="Finalizar feição">✅</button>
+      <button class="map-fab hidden" id="btnMapUndo" title="Desfazer último vértice">↩️</button>
+      <button class="map-fab-capture" id="btnMapCapture" title="Coletar aqui">➕</button>
+    </div>
   </div>
 
   <!-- VIEW: Dados -->

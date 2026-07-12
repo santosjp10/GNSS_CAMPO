@@ -28,7 +28,12 @@
 
     if (name === 'mapa') {
       if (!mapInited) { MapModule.init('map'); mapInited = true; refreshTileCount(); }
-      setTimeout(() => { MapModule.invalidateSize(); MapModule.drawAll(features); }, 50);
+      setTimeout(() => { MapModule.invalidateSize(); MapModule.drawAll(features); MapModule.updateDraft(mode, draft); }, 50);
+      document.getElementById('mapModeBadge').textContent = 'Modo: ' + MODE_LABELS[mode];
+      document.getElementById('mapCollectInfo').classList.toggle('hidden', mode === 'point' || !draft.length);
+      document.getElementById('btnMapUndo').classList.toggle('hidden', mode === 'point' || !draft.length);
+      document.getElementById('btnMapFinish').classList.toggle('hidden', mode === 'point' || draft.length < (mode === 'line' ? 2 : 3));
+      document.getElementById('btnMapCapture').textContent = mode === 'point' ? '📍' : '➕';
     }
     if (name === 'dados') renderFeatureList();
     if (name === 'exportar') renderExportSummary();
@@ -77,6 +82,8 @@
     if (mapInited && fix) MapModule.updatePosition(fix, currentView === 'mapa');
   });
 
+  const MODE_LABELS = { point: 'Ponto', line: 'Linha', polygon: 'Polígono' };
+
   // ---------- Modo de captura ----------
   document.querySelectorAll('.mode-opt').forEach(opt => {
     opt.addEventListener('click', () => {
@@ -92,19 +99,35 @@
 
   function renderDraft() {
     document.getElementById('vertexCount').textContent = draft.length;
+    document.getElementById('mapCollectCount').textContent = draft.length;
+    let measureText = '';
     if (mode === 'line') {
-      document.getElementById('vertexMeasure').textContent = Geometry.fmtDist(Geometry.lineLength(draft));
+      measureText = Geometry.fmtDist(Geometry.lineLength(draft));
     } else if (mode === 'polygon') {
       const a = draft.length >= 3 ? Geometry.polygonArea(draft) : { area_m2: 0 };
-      document.getElementById('vertexMeasure').textContent = Geometry.fmtArea(a.area_m2);
+      measureText = Geometry.fmtArea(a.area_m2);
     }
+    document.getElementById('vertexMeasure').textContent = measureText;
+    document.getElementById('mapCollectMeasure').textContent = measureText;
+
+    document.getElementById('mapModeBadge').textContent = 'Modo: ' + MODE_LABELS[mode];
+    document.getElementById('mapCollectInfo').classList.toggle('hidden', mode === 'point' || !draft.length);
+    document.getElementById('btnMapUndo').classList.toggle('hidden', mode === 'point' || !draft.length);
+    const min = mode === 'line' ? 2 : 3;
+    document.getElementById('btnMapFinish').classList.toggle('hidden', mode === 'point' || draft.length < min);
+
+    if (mapInited) MapModule.updateDraft(mode, draft);
   }
 
-  document.getElementById('btnUndo').addEventListener('click', () => { draft.pop(); renderDraft(); });
-  document.getElementById('btnCancelDraft').addEventListener('click', () => { draft = []; renderDraft(); });
+  function doUndo() { draft.pop(); renderDraft(); }
+  function doCancelDraft() { draft = []; renderDraft(); if (mapInited) MapModule.clearDraft(); }
 
-  // ---------- Captura ----------
-  document.getElementById('btnCapture').addEventListener('click', () => {
+  document.getElementById('btnUndo').addEventListener('click', doUndo);
+  document.getElementById('btnCancelDraft').addEventListener('click', doCancelDraft);
+  document.getElementById('btnMapUndo').addEventListener('click', doUndo);
+
+  // ---------- Captura (compartilhada entre aba Coletar e aba Mapa) ----------
+  function doCapture() {
     const fix = GNSS.getLast();
     if (!fix) { toast('Aguardando sinal GNSS...', 'error'); return; }
     if (fix.accuracy != null && fix.accuracy > settings.minAccuracy) {
@@ -119,19 +142,28 @@
       renderDraft();
       toast(`Vértice ${draft.length} adicionado`, 'success');
     }
-  });
+  }
 
-  document.getElementById('btnCapture').addEventListener('contextmenu', e => e.preventDefault());
-
-  document.getElementById('btnFinishFeature').addEventListener('click', () => {
+  function doFinish() {
     const min = mode === 'line' ? 2 : 3;
     if (draft.length < min) { toast(`Mínimo de ${min} vértices para ${mode === 'line' ? 'linha' : 'polígono'}`, 'error'); return; }
     saveFeature(mode, draft.slice());
     draft = [];
     renderDraft();
-  });
+    if (mapInited) MapModule.clearDraft();
+  }
+
+  document.getElementById('btnCapture').addEventListener('click', doCapture);
+  document.getElementById('btnCapture').addEventListener('contextmenu', e => e.preventDefault());
+  document.getElementById('btnMapCapture').addEventListener('click', doCapture);
+
+  document.getElementById('btnFinishFeature').addEventListener('click', doFinish);
+  document.getElementById('btnMapFinish').addEventListener('click', doFinish);
+
   const modeObserver = () => {
     document.getElementById('vertexActions').classList.toggle('hidden', mode === 'point');
+    document.getElementById('mapModeBadge').textContent = 'Modo: ' + MODE_LABELS[mode];
+    document.getElementById('btnMapCapture').textContent = mode === 'point' ? '📍' : '➕';
   };
   document.querySelectorAll('.mode-opt').forEach(o => o.addEventListener('click', modeObserver));
 

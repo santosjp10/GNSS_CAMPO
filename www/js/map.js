@@ -1,6 +1,6 @@
 // map.js — mapa Leaflet com camadas satélite/ruas e cache de tiles offline (IndexedDB)
 const MapModule = (() => {
-  let map, posMarker, posAccuracyCircle, layerGroup, currentBase;
+  let map, posMarker, posAccuracyCircle, layerGroup, draftLayerGroup, currentBase;
   let dbPromise;
   const DB_NAME = 'gnsscampo_tiles';
   const STORE = 'tiles';
@@ -92,6 +92,7 @@ const MapModule = (() => {
   function init(elId) {
     map = L.map(elId, { zoomControl: false, attributionControl: true }).setView([-11.72, -49.06], 14);
     layerGroup = L.layerGroup().addTo(map);
+    draftLayerGroup = L.layerGroup().addTo(map);
     setBaseLayer('satellite');
     return map;
   }
@@ -121,6 +122,38 @@ const MapModule = (() => {
   }
 
   function clearFeatures() { layerGroup.clearLayers(); }
+
+  // Desenha em tempo real a feição que está sendo coletada (mode: 'point'|'line'|'polygon', coords: [{lat,lng}])
+  function updateDraft(mode, coords) {
+    if (!draftLayerGroup) return;
+    draftLayerGroup.clearLayers();
+    if (!coords || !coords.length || mode === 'point') return;
+
+    const latlngs = coords.map(c => [c.lat, c.lng]);
+
+    // vértices
+    latlngs.forEach((ll, i) => {
+      L.circleMarker(ll, {
+        radius: 5.5, color: '#fff', weight: 2,
+        fillColor: i === 0 ? '#c2410c' : '#0f7ea3', fillOpacity: 1
+      }).addTo(draftLayerGroup);
+    });
+
+    if (mode === 'line') {
+      L.polyline(latlngs, { color: '#0f7ea3', weight: 4, dashArray: '2 6' }).addTo(draftLayerGroup);
+    } else if (mode === 'polygon') {
+      if (latlngs.length >= 2) {
+        L.polyline(latlngs, { color: '#c2410c', weight: 3 }).addTo(draftLayerGroup);
+      }
+      if (latlngs.length >= 3) {
+        // prévia do fechamento do polígono (linha tracejada até o primeiro vértice) + preenchimento
+        L.polyline([latlngs[latlngs.length - 1], latlngs[0]], { color: '#c2410c', weight: 2, dashArray: '4 6' }).addTo(draftLayerGroup);
+        L.polygon(latlngs, { color: '#c2410c', weight: 0, fillOpacity: 0.16 }).addTo(draftLayerGroup);
+      }
+    }
+  }
+
+  function clearDraft() { if (draftLayerGroup) draftLayerGroup.clearLayers(); }
 
   function drawFeature(f) {
     if (f.type === 'point') {
@@ -156,6 +189,7 @@ const MapModule = (() => {
 
   return {
     init, setBaseLayer, updatePosition, centerOnPosition, drawAll, clearFeatures,
+    updateDraft, clearDraft,
     fitAll, invalidateSize, tileCacheCount, clearTileCache, getMap: () => map
   };
 })();
