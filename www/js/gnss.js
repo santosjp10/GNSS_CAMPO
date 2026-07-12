@@ -19,6 +19,33 @@ const GNSS = (() => {
   function isBluetoothConnected() { return btConnected; }
 
   // ---------- GPS interno ----------
+  let satListenerHandle = null;
+  function nativeGnssStatus() {
+    return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.GnssStatus;
+  }
+  async function startSatelliteListener() {
+    const plugin = nativeGnssStatus();
+    if (!plugin) return; // indisponível fora do app compilado (ex.: navegador de teste)
+    try {
+      satListenerHandle = await plugin.addListener('gnssStatusChange', data => {
+        if (lastFix && lastFix.source === 'internal') {
+          lastFix.satellites = data.satellitesUsed;
+          lastFix.satellitesInView = data.satellitesInView;
+          emit();
+        }
+      });
+      await plugin.startListening();
+    } catch (e) { console.warn('GnssStatus indisponível:', e); }
+  }
+  async function stopSatelliteListener() {
+    const plugin = nativeGnssStatus();
+    if (!plugin) return;
+    try {
+      if (satListenerHandle) { satListenerHandle.remove(); satListenerHandle = null; }
+      await plugin.stopListening();
+    } catch (e) { /* ignore */ }
+  }
+
   function startInternal() {
     stop();
     source = 'internal';
@@ -32,7 +59,8 @@ const GNSS = (() => {
         altAccuracy: pos.coords.altitudeAccuracy,
         speed: pos.coords.speed,
         heading: pos.coords.heading,
-        satellites: null,
+        satellites: lastFix?.source === 'internal' ? lastFix.satellites : null,
+        satellitesInView: lastFix?.source === 'internal' ? lastFix.satellitesInView : null,
         fixQuality: null,
         hdop: null,
         source: 'internal',
@@ -42,6 +70,7 @@ const GNSS = (() => {
     }, err => {
       console.error('Erro GPS interno:', err);
     }, { enableHighAccuracy: true, maximumAge: 500, timeout: 20000 });
+    startSatelliteListener();
   }
 
   function stop() {
@@ -49,6 +78,7 @@ const GNSS = (() => {
       navigator.geolocation.clearWatch(watchId);
       watchId = null;
     }
+    stopSatelliteListener();
     if (btConnected) disconnectBluetooth();
   }
 

@@ -29,7 +29,7 @@
     <div class="card">
       <div class="pos-grid">
         <div class="pos-box"><div class="v" id="posAccuracy">--</div><div class="l">Precisão (m)</div></div>
-        <div class="pos-box"><div class="v" id="posSats">--</div><div class="l">Satélites</div></div>
+        <div class="pos-box"><div class="v" id="posSats">--</div><div class="l">Satélites (uso/vista)</div></div>
       </div>
       <div class="coord-line"><span class="cl-label">Latitude</span><span class="cl-val" id="posLat">--</span></div>
       <div class="coord-line"><span class="cl-label">Longitude</span><span class="cl-val" id="posLng">--</span></div>
@@ -38,20 +38,25 @@
       <div class="coord-line"><span class="cl-label">Fonte GNSS</span><span class="cl-val" id="posSource">GPS interno</span></div>
     </div>
 
-    <!-- Linha / Polígono: lista de vértices -->
+    <!-- Linha / Polígono: resumo (sem lista completa — isso fica na aba Dados) -->
     <div id="vertexSection" class="hidden">
       <div class="stat-strip">
-        <div class="stat-chip"><div class="n" id="vertexCount">0</div><div class="l">Vértices</div></div>
+        <div class="stat-chip"><div class="n" id="vertexCount">0</div><div class="l">Vértices coletados</div></div>
         <div class="stat-chip"><div class="n" id="vertexMeasure">0 m</div><div class="l" id="vertexMeasureLabel">Comprimento</div></div>
       </div>
-      <div class="vertex-list" id="vertexList"></div>
-      <div class="btn-row" style="margin-bottom:12px">
+    </div>
+
+    <button class="btn btn-primary" id="btnCapture">Marcar ponto aqui</button>
+
+    <div id="vertexActions" class="hidden" style="margin-top:10px">
+      <button class="btn btn-outline" id="btnFinishFeature" style="margin-bottom:8px">Finalizar feição</button>
+      <div class="btn-row">
         <button class="btn btn-ghost btn-sm" id="btnUndo">Desfazer último</button>
         <button class="btn btn-ghost btn-sm" id="btnCancelDraft">Cancelar</button>
       </div>
     </div>
 
-    <div class="card" id="metaCard">
+    <div class="card" id="metaCard" style="margin-top:14px">
       <p class="card-title">Dados da feição</p>
       <div class="field">
         <label>Nome</label>
@@ -69,13 +74,11 @@
           <option value="Outro">Outro</option>
         </select>
       </div>
-      <div class="field">
+      <div class="field" style="margin-bottom:0">
         <label>Observações</label>
         <textarea id="fNotes" placeholder="Opcional"></textarea>
       </div>
     </div>
-
-    <button class="btn btn-primary" id="btnCapture">Marcar ponto aqui</button>
   </div>
 
   <!-- VIEW: Mapa -->

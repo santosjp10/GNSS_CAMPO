@@ -58,7 +58,9 @@
   function updatePositionPanel(fix) {
     if (!fix) return;
     document.getElementById('posAccuracy').textContent = fix.accuracy != null ? fix.accuracy.toFixed(1) : '--';
-    document.getElementById('posSats').textContent = fix.satellites != null ? fix.satellites : '--';
+    document.getElementById('posSats').textContent = fix.satellites != null
+      ? (fix.satellitesInView != null ? `${fix.satellites}/${fix.satellitesInView}` : fix.satellites)
+      : '--';
     document.getElementById('posLat').textContent = Geometry.fmtCoord(fix.lat) + '°';
     document.getElementById('posLng').textContent = Geometry.fmtCoord(fix.lng) + '°';
     document.getElementById('posAlt').textContent = fix.alt != null ? fix.alt.toFixed(1) + ' m' : '--';
@@ -89,10 +91,6 @@
   });
 
   function renderDraft() {
-    const list = document.getElementById('vertexList');
-    list.innerHTML = draft.map((c, i) => `
-      <div class="vertex-item"><div class="vn">${i + 1}</div><div class="vc">${Geometry.fmtCoord(c.lat)}, ${Geometry.fmtCoord(c.lng)}</div></div>
-    `).join('');
     document.getElementById('vertexCount').textContent = draft.length;
     if (mode === 'line') {
       document.getElementById('vertexMeasure').textContent = Geometry.fmtDist(Geometry.lineLength(draft));
@@ -125,26 +123,16 @@
 
   document.getElementById('btnCapture').addEventListener('contextmenu', e => e.preventDefault());
 
-  // Botão de finalizar feição (linha/polígono) — reaproveita o botão principal com toque longo? Melhor: botão dedicado
-  function addFinishButton() {
-    const metaCard = document.getElementById('metaCard');
-    const finishBtn = document.createElement('button');
-    finishBtn.className = 'btn btn-outline';
-    finishBtn.id = 'btnFinishFeature';
-    finishBtn.textContent = 'Finalizar feição';
-    finishBtn.style.marginBottom = '10px';
-    finishBtn.addEventListener('click', () => {
-      const min = mode === 'line' ? 2 : 3;
-      if (draft.length < min) { toast(`Mínimo de ${min} vértices para ${mode === 'line' ? 'linha' : 'polígono'}`, 'error'); return; }
-      saveFeature(mode, draft.slice());
-      draft = [];
-      renderDraft();
-    });
-    metaCard.parentNode.insertBefore(finishBtn, document.getElementById('btnCapture'));
-  }
-  addFinishButton();
-  document.getElementById('btnFinishFeature').style.display = 'none';
-  const modeObserver = () => { document.getElementById('btnFinishFeature').style.display = mode === 'point' ? 'none' : 'block'; };
+  document.getElementById('btnFinishFeature').addEventListener('click', () => {
+    const min = mode === 'line' ? 2 : 3;
+    if (draft.length < min) { toast(`Mínimo de ${min} vértices para ${mode === 'line' ? 'linha' : 'polígono'}`, 'error'); return; }
+    saveFeature(mode, draft.slice());
+    draft = [];
+    renderDraft();
+  });
+  const modeObserver = () => {
+    document.getElementById('vertexActions').classList.toggle('hidden', mode === 'point');
+  };
   document.querySelectorAll('.mode-opt').forEach(o => o.addEventListener('click', modeObserver));
 
   function saveFeature(type, coords) {
@@ -172,40 +160,139 @@
   }
 
   // ---------- Aba Dados ----------
+  let expandedId = null;   // id da feição concluída atualmente expandida para edição
+  let editCoords = null;   // cópia mutável dos vértices em edição
+
   function renderFeatureList() {
     const listEl = document.getElementById('featList');
     document.getElementById('countPoints').textContent = features.filter(f => f.type === 'point').length;
     document.getElementById('countLines').textContent = features.filter(f => f.type === 'line').length;
     document.getElementById('countPolygons').textContent = features.filter(f => f.type === 'polygon').length;
 
-    if (!features.length) {
+    let html = '';
+
+    // Feição em coleta (ainda não finalizada) — editável em tempo real
+    if (draft.length && mode !== 'point') {
+      const measure = mode === 'line' ? Geometry.fmtDist(Geometry.lineLength(draft)) : Geometry.fmtArea(draft.length >= 3 ? Geometry.polygonArea(draft).area_m2 : 0);
+      html += `<div class="section-label">Em coleta agora (${mode === 'line' ? 'linha' : 'polígono'})</div>
+        <div class="edit-panel">
+          <div class="stat-strip" style="margin-bottom:10px">
+            <div class="stat-chip"><div class="n">${draft.length}</div><div class="l">Vértices</div></div>
+            <div class="stat-chip"><div class="n" style="font-size:13px">${measure}</div><div class="l">${mode === 'line' ? 'Comprimento' : 'Área'}</div></div>
+          </div>
+          <div class="vertex-list" id="draftVertexList"></div>
+          ${!draft.length ? '<p class="empty" style="padding:10px 0"><span style="font-size:12.5px">Volte à aba Coletar para adicionar vértices.</span></p>' : ''}
+        </div>`;
+    }
+
+    if (!features.length && !(draft.length && mode !== 'point')) {
       listEl.innerHTML = `<div class="empty"><div class="ic">📭</div><p>Nenhuma feição coletada ainda.<br>Vá até a aba Coletar para começar.</p></div>`;
       return;
     }
+
     const icon = { point: '📍', line: '📏', polygon: '⬟' };
-    listEl.innerHTML = features.slice().reverse().map(f => {
+    features.slice().reverse().forEach(f => {
       const meta = f.type === 'point'
         ? `${f.category || '-'} · ${new Date(f.timestamp).toLocaleString('pt-BR')}`
         : f.type === 'line'
           ? `${Geometry.fmtDist(f.length_m || 0)} · ${f.coords.length} vértices`
           : `${Geometry.fmtArea(f.area_m2 || 0)} · ${f.coords.length} vértices`;
-      return `<div class="feat-item">
+      html += `<div class="feat-item" data-id="${f.id}" data-expandable="${f.type !== 'point'}">
         <div class="feat-icon ${f.type}">${icon[f.type]}</div>
         <div class="feat-body"><div class="feat-name">${escapeHtml(f.name)}</div><div class="feat-meta">${meta}</div></div>
         <button class="feat-del" data-id="${f.id}">✕</button>
       </div>`;
-    }).join('');
-    listEl.querySelectorAll('.feat-del').forEach(btn => btn.addEventListener('click', () => {
+      if (f.id === expandedId && editCoords) {
+        html += `<div class="edit-panel" id="editPanel">
+          <div class="vertex-list" id="editVertexList"></div>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn btn-ghost btn-sm" id="btnCancelEdit">Cancelar</button>
+            <button class="btn btn-primary btn-sm" id="btnSaveEdit">Salvar alterações</button>
+          </div>
+        </div>`;
+      }
+    });
+
+    listEl.innerHTML = html;
+
+    if (draft.length && mode !== 'point') renderVertexEditor('draftVertexList', draft, null);
+    if (expandedId && editCoords) renderVertexEditor('editVertexList', editCoords, expandedId);
+
+    listEl.querySelectorAll('.feat-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.feat-del')) return;
+        const id = item.dataset.id;
+        if (item.dataset.expandable !== 'true') return;
+        if (expandedId === id) { expandedId = null; editCoords = null; }
+        else {
+          const f = features.find(x => x.id === id);
+          expandedId = id;
+          editCoords = f.coords.map(c => ({ ...c }));
+        }
+        renderFeatureList();
+      });
+    });
+    listEl.querySelectorAll('.feat-del').forEach(btn => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (btn.dataset.id === expandedId) { expandedId = null; editCoords = null; }
       features = Storage.deleteFeature(btn.dataset.id);
       renderFeatureList();
       if (mapInited) MapModule.drawAll(features);
     }));
+    const cancelBtn = document.getElementById('btnCancelEdit');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => { expandedId = null; editCoords = null; renderFeatureList(); });
+    const saveBtn = document.getElementById('btnSaveEdit');
+    if (saveBtn) saveBtn.addEventListener('click', () => {
+      const min = features.find(f => f.id === expandedId)?.type === 'line' ? 2 : 3;
+      if (editCoords.length < min) { toast(`Mínimo de ${min} vértices`, 'error'); return; }
+      const list = Storage.getFeatures();
+      const f = list.find(x => x.id === expandedId);
+      f.coords = editCoords;
+      if (f.type === 'line') { f.length_m = Geometry.lineLength(f.coords); }
+      if (f.type === 'polygon') {
+        const a = Geometry.polygonArea(f.coords);
+        f.area_m2 = a.area_m2; f.area_ha = a.area_ha; f.perimeter_m = a.perimeter_m; f.utm_zone = a.zone;
+      }
+      Storage.saveFeatures(list);
+      features = list;
+      expandedId = null; editCoords = null;
+      toast('Feição atualizada', 'success');
+      renderFeatureList();
+      if (mapInited) MapModule.drawAll(features);
+    });
   }
+
+  // Renderiza uma lista de vértices editável (reordenar / excluir) dentro do container informado.
+  // targetArray é a referência mutável (draft ou editCoords); se editingFeatureId for null, é a coleta em andamento.
+  function renderVertexEditor(containerId, targetArray, editingFeatureId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = targetArray.map((c, i) => `
+      <div class="vertex-item">
+        <div class="vn">${i + 1}</div>
+        <div class="vc">${Geometry.fmtCoord(c.lat)}, ${Geometry.fmtCoord(c.lng)}</div>
+        <button class="vbtn" data-act="up" data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="vbtn" data-act="down" data-i="${i}" ${i === targetArray.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="vbtn danger" data-act="del" data-i="${i}">✕</button>
+      </div>`).join('');
+    el.querySelectorAll('.vbtn').forEach(btn => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const i = parseInt(btn.dataset.i, 10);
+      const act = btn.dataset.act;
+      if (act === 'up' && i > 0) { [targetArray[i - 1], targetArray[i]] = [targetArray[i], targetArray[i - 1]]; }
+      else if (act === 'down' && i < targetArray.length - 1) { [targetArray[i + 1], targetArray[i]] = [targetArray[i], targetArray[i + 1]]; }
+      else if (act === 'del') { targetArray.splice(i, 1); }
+      if (editingFeatureId === null) renderDraft();
+      renderFeatureList();
+    }));
+  }
+
   document.getElementById('btnClearAll').addEventListener('click', () => {
     if (!features.length) return;
     if (confirm('Apagar todas as feições coletadas? Esta ação não pode ser desfeita.')) {
       Storage.clearAll();
       features = [];
+      expandedId = null; editCoords = null;
       renderFeatureList();
       if (mapInited) MapModule.drawAll(features);
       toast('Todos os dados foram apagados');

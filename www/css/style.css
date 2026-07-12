@@ -117,6 +117,10 @@ body{
 .vertex-item{display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:10px;padding:9px 11px;font-size:12.5px;}
 .vertex-item .vn{width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;}
 .vertex-item .vc{flex:1;font-variant-numeric:tabular-nums;color:var(--muted);}
+.vbtn{width:26px;height:26px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;}
+.vbtn.danger{color:var(--danger);border-color:var(--danger-light);}
+.vbtn:disabled{opacity:.35;}
+.edit-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin:-4px 0 10px;}
 .stat-strip{display:flex;gap:10px;margin-bottom:12px;}
 .stat-chip{flex:1;background:var(--primary-light);border-radius:10px;padding:9px;text-align:center;}
 .stat-chip .n{font-size:16px;font-weight:800;color:var(--primary-dark);}
