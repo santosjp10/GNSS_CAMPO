@@ -165,6 +165,19 @@ const GNSS = (() => {
   }
 
   // ---------- Parser NMEA 0183 (compartilhado entre Bluetooth e TCP) ----------
+
+  // Erro base típico (m) por tipo de fixação, usado como fallback quando o receptor não envia GST.
+  // O HDOP/VDOP é um fator adimensional que multiplica esse erro base — usar 3m fixo para todos os
+  // tipos (como antes) fazia uma solução RTK fixo aparecer com a mesma imprecisão de um GPS simples.
+  const BASE_ERROR_BY_QUALITY = {
+    0: null,  // sem fixação
+    1: 2.5,   // GPS simples (autônomo)
+    2: 1.0,   // DGPS
+    4: 0.02,  // RTK fixo (~2 cm)
+    5: 0.3,   // RTK flutuante (~30 cm)
+    6: 3.0    // estimado / dead reckoning
+  };
+
   function nmeaToDecimal(raw, hemi) {
     if (!raw) return null;
     const dotIdx = raw.indexOf('.');
@@ -174,6 +187,15 @@ const GNSS = (() => {
     let dec = deg + min / 60;
     if (hemi === 'S' || hemi === 'W') dec = -dec;
     return dec;
+  }
+
+  // Recalcula a estimativa de precisão (HDOP/VDOP x erro base da fixação atual) — só usada como
+  // fallback; é sobrescrita por valores reais vindos da sentença GST quando o receptor os envia.
+  function estimateAccuracy(fix) {
+    const base = fix.fixQuality != null ? BASE_ERROR_BY_QUALITY[fix.fixQuality] : null;
+    if (base == null) return;
+    if (fix.hdop != null) fix.accuracy = +(fix.hdop * base).toFixed(3);
+    if (fix.vdop != null) fix.vAccuracy = +(fix.vdop * base).toFixed(3);
   }
 
   function parseNMEA(line, fixSource) {
@@ -191,21 +213,21 @@ const GNSS = (() => {
       const hdop = parseFloat(f[8]);
       const alt = parseFloat(f[9]);
       if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
-        const prevVdop = lastFix?.vdop ?? null;
+        const prev = lastFix;
         lastFix = {
           lat, lng, alt: isNaN(alt) ? null : alt,
-          accuracy: !isNaN(hdop) ? +(hdop * 3).toFixed(2) : null, // estimativa aproximada (HDOP x erro base 3m)
-          vAccuracy: prevVdop != null ? +(prevVdop * 3).toFixed(2) : null, // vem do GSA (VDOP), se já recebido
-          altAccuracy: null, speed: lastFix?.speed ?? null, heading: lastFix?.heading ?? null,
+          accuracy: null, vAccuracy: null, accuracySource: null,
+          altAccuracy: null, speed: prev?.speed ?? null, heading: prev?.heading ?? null,
           satellites: isNaN(sats) ? null : sats,
           fixQuality: isNaN(quality) ? null : quality,
           fixQualityLabel: FIX_QUALITY[quality] || '—',
           hdop: isNaN(hdop) ? null : hdop,
-          vdop: prevVdop,
-          pdop: lastFix?.pdop ?? null,
+          vdop: prev?.vdop ?? null,
+          pdop: prev?.pdop ?? null,
           source: fixSource || 'bluetooth',
           timestamp: Date.now()
         };
+        estimateAccuracy(lastFix);
         emit();
       }
     } else if (type === 'GSA' && f.length >= 18) {
@@ -215,8 +237,23 @@ const GNSS = (() => {
       const vdop = parseFloat(f[17]);
       if (lastFix) {
         if (!isNaN(pdop)) lastFix.pdop = pdop;
-        if (!isNaN(hdop)) { lastFix.hdop = hdop; lastFix.accuracy = +(hdop * 3).toFixed(2); }
-        if (!isNaN(vdop)) { lastFix.vdop = vdop; lastFix.vAccuracy = +(vdop * 3).toFixed(2); }
+        if (!isNaN(hdop)) lastFix.hdop = hdop;
+        if (!isNaN(vdop)) lastFix.vdop = vdop;
+        if (lastFix.accuracySource !== 'gst') estimateAccuracy(lastFix);
+        emit();
+      }
+    } else if (type === 'GST' && f.length >= 9) {
+      // Sentença de estatística de ruído do próprio receptor — erro real (m), muito mais preciso
+      // que a estimativa por HDOP. Sempre que presente, tem prioridade sobre o cálculo acima.
+      const latErr = parseFloat(f[6]);
+      const lonErr = parseFloat(f[7]);
+      const altErr = parseFloat(f[8]);
+      if (lastFix) {
+        if (!isNaN(latErr) && !isNaN(lonErr)) {
+          lastFix.accuracy = +Math.sqrt(latErr * latErr + lonErr * lonErr).toFixed(3);
+          lastFix.accuracySource = 'gst';
+        }
+        if (!isNaN(altErr)) lastFix.vAccuracy = +altErr.toFixed(3);
         emit();
       }
     } else if (type === 'RMC' && f.length >= 8) {
@@ -228,6 +265,7 @@ const GNSS = (() => {
       }
     }
   }
+
 
   function start(src) {
     if (src === 'bluetooth') { source = 'bluetooth'; /* conexão feita via connectBluetooth() */ }

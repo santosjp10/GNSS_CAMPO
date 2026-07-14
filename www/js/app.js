@@ -60,16 +60,22 @@
     dot.classList.add('pulse');
     const acc = fix.accuracy;
     if (acc == null) { badge.className = 'gnss-badge warn'; text.textContent = 'Buscando...'; }
-    else if (acc <= settings.minAccuracy) { badge.className = 'gnss-badge ok'; text.textContent = `±${acc.toFixed(1)}m`; }
-    else { badge.className = 'gnss-badge warn'; text.textContent = `±${acc.toFixed(1)}m (baixa)`; }
+    else if (acc <= settings.minAccuracy) { badge.className = 'gnss-badge ok'; text.textContent = `±${fmtAccuracy(acc)}m`; }
+    else { badge.className = 'gnss-badge warn'; text.textContent = `±${fmtAccuracy(acc)}m (baixa)`; }
+  }
+
+  function fmtAccuracy(v) {
+    if (v == null) return '--';
+    if (v < 1) return v.toFixed(3);   // precisão centimétrica (RTK) — mostra mm/cm
+    return v.toFixed(2);
   }
 
   // ---------- Painel de posição ----------
   function updatePositionPanel(fix) {
     if (!fix) return;
-    document.getElementById('posAccuracy').textContent = fix.accuracy != null ? fix.accuracy.toFixed(1) : '--';
+    document.getElementById('posAccuracy').textContent = fmtAccuracy(fix.accuracy);
     const vAcc = fix.vAccuracy != null ? fix.vAccuracy : (fix.altAccuracy != null ? fix.altAccuracy : null);
-    document.getElementById('posVAccuracy').textContent = vAcc != null ? vAcc.toFixed(1) : '--';
+    document.getElementById('posVAccuracy').textContent = fmtAccuracy(vAcc);
     document.getElementById('posSats').textContent = fix.satellites != null
       ? (fix.satellitesInView != null ? `${fix.satellites}/${fix.satellitesInView}` : fix.satellites)
       : '--';
@@ -168,7 +174,7 @@
     const fix = GNSS.getLast();
     if (!fix) { toast('Aguardando sinal GNSS...', 'error'); return; }
     if (fix.accuracy != null && fix.accuracy > settings.minAccuracy) {
-      toast(`Precisão atual (±${fix.accuracy.toFixed(1)}m) está abaixo do limite configurado`, 'error');
+      toast(`Precisão atual (±${fmtAccuracy(fix.accuracy)}m) está abaixo do limite configurado`, 'error');
     }
     const coord = { lat: fix.lat, lng: fix.lng, alt: fix.alt, accuracy: fix.accuracy, source: fix.source };
 
