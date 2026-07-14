@@ -171,6 +171,28 @@
         <button class="btn btn-outline btn-sm" id="btnBtScan">Buscar dispositivos pareados</button>
         <button class="btn btn-primary btn-sm" id="btnBtConnect" style="margin-top:8px">Conectar</button>
       </div>
+
+      <div class="switch-row">
+        <div><div class="sr-t">GNSS Master (rede local/USB-C)</div><div class="sr-s">Receptor via USB-C lido pelo app GNSS Master</div></div>
+        <div class="switch" id="swGnssMaster" data-src="gnssmaster"><div class="knob"></div></div>
+      </div>
+      <div id="tcpConfigSection" class="hidden" style="margin-top:10px">
+        <div class="field">
+          <label>Endereço (IP)</label>
+          <input type="text" id="tcpHost" placeholder="127.0.0.1" value="127.0.0.1">
+        </div>
+        <div class="field" style="margin-bottom:8px">
+          <label>Porta TCP</label>
+          <input type="number" id="tcpPort" placeholder="Ex.: 11123">
+        </div>
+        <button class="btn btn-primary btn-sm" id="btnTcpConnect">Conectar ao GNSS Master</button>
+        <p style="font-size:11.5px;color:var(--muted);margin:10px 0 0;line-height:1.5;">
+          No app <b>GNSS Master</b>: conecte seu receptor em <b>GNSS Receiver Connection</b> (USB Serial),
+          depois em <b>Receiver Data Output</b> escolha <b>TCP Server</b>, defina uma porta e inicie.
+          Informe essa mesma porta aqui (o endereço <b>127.0.0.1</b> funciona porque os dois apps
+          rodam no mesmo aparelho).
+        </p>
+      </div>
     </div>
 
     <p class="section-label">Qualidade</p>

@@ -74,7 +74,10 @@
     document.getElementById('posLat').textContent = Geometry.fmtCoord(fix.lat) + '°';
     document.getElementById('posLng').textContent = Geometry.fmtCoord(fix.lng) + '°';
     document.getElementById('posAlt').textContent = fix.alt != null ? fix.alt.toFixed(1) + ' m' : '--';
-    document.getElementById('posSource').textContent = fix.source === 'bluetooth' ? `Bluetooth (${fix.fixQualityLabel || '—'})` : 'GPS interno';
+    document.getElementById('posSource').textContent =
+      fix.source === 'bluetooth' ? `Bluetooth (${fix.fixQualityLabel || '—'})` :
+      fix.source === 'gnssmaster' ? `GNSS Master (${fix.fixQualityLabel || '—'})` :
+      'GPS interno';
     try {
       const utm = Geometry.toUTM(fix.lat, fix.lng);
       document.getElementById('posUtm').textContent = `${utm.x.toFixed(1)}, ${utm.y.toFixed(1)} (${utm.zone}${utm.hemisphere})`;
@@ -482,7 +485,11 @@
     document.getElementById('cfgMinAccuracy').value = settings.minAccuracy;
     document.getElementById('swInternal').classList.toggle('on', settings.gnssSource === 'internal');
     document.getElementById('swBluetooth').classList.toggle('on', settings.gnssSource === 'bluetooth');
+    document.getElementById('swGnssMaster').classList.toggle('on', settings.gnssSource === 'gnssmaster');
     document.getElementById('btDeviceSection').classList.toggle('hidden', settings.gnssSource !== 'bluetooth');
+    document.getElementById('tcpConfigSection').classList.toggle('hidden', settings.gnssSource !== 'gnssmaster');
+    document.getElementById('tcpHost').value = settings.tcpHost || '127.0.0.1';
+    document.getElementById('tcpPort').value = settings.tcpPort || '';
     refreshTileCount();
   }
   document.getElementById('cfgProject').addEventListener('change', e => { settings.projectName = e.target.value; Storage.saveSettings(settings); });
@@ -497,17 +504,35 @@
     refreshTileCount();
   });
 
-  document.querySelectorAll('#swInternal, #swBluetooth').forEach(sw => {
+  document.querySelectorAll('#swInternal, #swBluetooth, #swGnssMaster').forEach(sw => {
     sw.addEventListener('click', () => {
       const src = sw.dataset.src;
       settings.gnssSource = src;
       Storage.saveSettings(settings);
       document.getElementById('swInternal').classList.toggle('on', src === 'internal');
       document.getElementById('swBluetooth').classList.toggle('on', src === 'bluetooth');
+      document.getElementById('swGnssMaster').classList.toggle('on', src === 'gnssmaster');
       document.getElementById('btDeviceSection').classList.toggle('hidden', src !== 'bluetooth');
-      if (src === 'internal') { GNSS.disconnectBluetooth(); GNSS.start('internal'); toast('Usando GPS interno'); }
-      else { GNSS.stop(); toast('Selecione um dispositivo Bluetooth pareado'); }
+      document.getElementById('tcpConfigSection').classList.toggle('hidden', src !== 'gnssmaster');
+      if (src === 'internal') { GNSS.disconnectBluetooth(); GNSS.disconnectTcp(); GNSS.start('internal'); toast('Usando GPS interno'); }
+      else if (src === 'bluetooth') { GNSS.stop(); toast('Selecione um dispositivo Bluetooth pareado'); }
+      else { GNSS.stop(); toast('Informe a porta configurada no GNSS Master e conecte'); }
     });
+  });
+
+  document.getElementById('btnTcpConnect').addEventListener('click', async () => {
+    const host = document.getElementById('tcpHost').value.trim() || '127.0.0.1';
+    const port = parseInt(document.getElementById('tcpPort').value, 10);
+    if (!port) { toast('Informe a porta TCP configurada no GNSS Master', 'error'); return; }
+    settings.tcpHost = host;
+    settings.tcpPort = port;
+    Storage.saveSettings(settings);
+    try {
+      await GNSS.connectTcp(host, port);
+      toast('Conectando ao GNSS Master...', 'success');
+    } catch (e) {
+      toast('Falha ao conectar: ' + (e.message || e), 'error');
+    }
   });
 
   document.getElementById('btnBtScan').addEventListener('click', async () => {
@@ -534,9 +559,9 @@
 
   // ---------- Inicialização ----------
   function init() {
-    try { GNSS.start(settings.gnssSource === 'bluetooth' ? 'internal' : 'internal'); } catch (e) { toast('Ative a localização para usar o GNSS'); }
-    // Nota: se gnssSource for 'bluetooth', o usuário precisa conectar manualmente na aba Config
-    // pois requer seleção de dispositivo pareado.
+    try { GNSS.start('internal'); } catch (e) { toast('Ative a localização para usar o GNSS'); }
+    // Nota: se gnssSource for 'bluetooth' ou 'gnssmaster', o usuário precisa reconectar manualmente
+    // na aba Config a cada abertura do app (seleção de dispositivo pareado ou host/porta TCP).
     modeObserver();
   }
   document.addEventListener('DOMContentLoaded', init);

@@ -30,7 +30,9 @@ const Storage = (() => {
     coordFormat: 'geo', // geo | utm
     minAccuracy: 15,     // metros — alerta se pior que isso
     baseLayer: 'satellite',
-    gnssSource: 'internal', // internal | bluetooth
+    gnssSource: 'internal', // internal | bluetooth | gnssmaster
+    tcpHost: '127.0.0.1',
+    tcpPort: '',
     projectName: '',
     operatorName: ''
   };
