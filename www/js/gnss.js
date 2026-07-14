@@ -1,10 +1,11 @@
-// gnss.js — fonte de posição: GPS interno do celular OU receptor externo via Bluetooth (NMEA 0183)
+// gnss.js — fonte de posição: GPS interno, receptor externo via Bluetooth (NMEA) ou via TCP local (ex.: app GNSS Master)
 const GNSS = (() => {
   let watchId = null;
   let listeners = [];
   let lastFix = null;
   let source = 'internal';
   let btConnected = false;
+  let tcpConnected = false;
   let nmeaBuffer = '';
 
   const FIX_QUALITY = {
@@ -17,6 +18,7 @@ const GNSS = (() => {
   function getLast() { return lastFix; }
   function getSource() { return source; }
   function isBluetoothConnected() { return btConnected; }
+  function isTcpConnected() { return tcpConnected; }
 
   // ---------- GPS interno ----------
   let satListenerHandle = null;
@@ -80,6 +82,7 @@ const GNSS = (() => {
     }
     stopSatelliteListener();
     if (btConnected) disconnectBluetooth();
+    if (tcpConnected) disconnectTcp();
   }
 
   // ---------- Bluetooth Classic SPP (cordova-plugin-bluetooth-serial) ----------
@@ -120,10 +123,42 @@ const GNSS = (() => {
     nmeaBuffer += data;
     const lines = nmeaBuffer.split('\n');
     nmeaBuffer = lines.pop();
-    lines.forEach(parseNMEA);
+    lines.forEach(l => parseNMEA(l, 'bluetooth'));
   }
 
-  // ---------- Parser NMEA 0183 ----------
+  // ---------- TCP local (ex.: app "GNSS Master" com Receiver Data Output = TCP Server) ----------
+  // Útil para receptores conectados via USB-C/OTG: o GNSS Master lê o receptor e repassa o NMEA
+  // por um socket TCP local, ao qual este app se conecta como cliente.
+  let tcpListenersAdded = false;
+  function tcpAvailable() {
+    return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TcpNmea;
+  }
+
+  async function connectTcp(host, port) {
+    const plugin = tcpAvailable();
+    if (!plugin) throw new Error('Plugin TCP indisponível (só funciona no app compilado)');
+    stop();
+    source = 'gnssmaster';
+    nmeaBuffer = '';
+
+    if (!tcpListenersAdded) {
+      await plugin.addListener('nmeaLine', data => parseNMEA(data.line, 'gnssmaster'));
+      await plugin.addListener('tcpStatus', data => {
+        tcpConnected = !!data.connected;
+        if (!data.connected && data.error) console.warn('TCP GNSS Master:', data.error);
+      });
+      tcpListenersAdded = true;
+    }
+    await plugin.connect({ host: host || '127.0.0.1', port: Number(port) });
+  }
+
+  function disconnectTcp() {
+    const plugin = tcpAvailable();
+    if (plugin) plugin.disconnect();
+    tcpConnected = false;
+  }
+
+  // ---------- Parser NMEA 0183 (compartilhado entre Bluetooth e TCP) ----------
   function nmeaToDecimal(raw, hemi) {
     if (!raw) return null;
     const dotIdx = raw.indexOf('.');
@@ -135,8 +170,8 @@ const GNSS = (() => {
     return dec;
   }
 
-  function parseNMEA(line) {
-    line = line.trim();
+  function parseNMEA(line, fixSource) {
+    line = (line || '').trim();
     if (!line.startsWith('$')) return;
     const body = line.split('*')[0];
     const f = body.split(',');
@@ -158,7 +193,7 @@ const GNSS = (() => {
           fixQuality: isNaN(quality) ? null : quality,
           fixQualityLabel: FIX_QUALITY[quality] || '—',
           hdop: isNaN(hdop) ? null : hdop,
-          source: 'bluetooth',
+          source: fixSource || 'bluetooth',
           timestamp: Date.now()
         };
         emit();
@@ -175,12 +210,14 @@ const GNSS = (() => {
 
   function start(src) {
     if (src === 'bluetooth') { source = 'bluetooth'; /* conexão feita via connectBluetooth() */ }
+    else if (src === 'gnssmaster') { source = 'gnssmaster'; /* conexão feita via connectTcp() */ }
     else startInternal();
   }
 
   return {
-    on, start, stop, getLast, getSource, isBluetoothConnected,
+    on, start, stop, getLast, getSource, isBluetoothConnected, isTcpConnected,
     listPairedDevices, connectBluetooth, disconnectBluetooth, btAvailable,
+    connectTcp, disconnectTcp, tcpAvailable,
     FIX_QUALITY
   };
 })();
