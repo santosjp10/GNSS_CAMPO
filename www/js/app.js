@@ -68,6 +68,8 @@
   function updatePositionPanel(fix) {
     if (!fix) return;
     document.getElementById('posAccuracy').textContent = fix.accuracy != null ? fix.accuracy.toFixed(1) : '--';
+    const vAcc = fix.vAccuracy != null ? fix.vAccuracy : (fix.altAccuracy != null ? fix.altAccuracy : null);
+    document.getElementById('posVAccuracy').textContent = vAcc != null ? vAcc.toFixed(1) : '--';
     document.getElementById('posSats').textContent = fix.satellites != null
       ? (fix.satellitesInView != null ? `${fix.satellites}/${fix.satellitesInView}` : fix.satellites)
       : '--';
@@ -78,11 +80,38 @@
       fix.source === 'bluetooth' ? `Bluetooth (${fix.fixQualityLabel || '—'})` :
       fix.source === 'gnssmaster' ? `GNSS Master (${fix.fixQualityLabel || '—'})` :
       'GPS interno';
+    const dopRow = document.getElementById('posDopRow');
+    if (fix.hdop != null || fix.vdop != null) {
+      dopRow.classList.remove('hidden');
+      document.getElementById('posDop').textContent = `${fix.hdop != null ? fix.hdop.toFixed(1) : '--'} / ${fix.vdop != null ? fix.vdop.toFixed(1) : '--'}`;
+    } else {
+      dopRow.classList.add('hidden');
+    }
     try {
       const utm = Geometry.toUTM(fix.lat, fix.lng);
       document.getElementById('posUtm').textContent = `${utm.x.toFixed(1)}, ${utm.y.toFixed(1)} (${utm.zone}${utm.hemisphere})`;
     } catch (e) { /* ignore */ }
   }
+
+  GNSS.onStatus(info => {
+    if (info.type === 'gnssmaster') {
+      const badge = document.getElementById('tcpStatusBadge');
+      if (badge) {
+        badge.textContent = info.connected ? 'Conectado ✓' : (info.error ? `Falha: ${info.error}` : 'Desconectado');
+        badge.classList.toggle('ok', info.connected);
+        badge.classList.toggle('err', !info.connected && !!info.error);
+      }
+      if (info.connected) toast('Conectado ao GNSS Master', 'success');
+      else if (info.error) toast('Falha ao conectar ao GNSS Master: ' + info.error, 'error');
+    } else if (info.type === 'bluetooth') {
+      const badge = document.getElementById('btStatusBadge');
+      if (badge) {
+        badge.textContent = info.connected ? 'Conectado ✓' : (info.error ? `Falha: ${info.error}` : 'Desconectado');
+        badge.classList.toggle('ok', info.connected);
+        badge.classList.toggle('err', !info.connected && !!info.error);
+      }
+    }
+  });
 
   GNSS.on(fix => {
     updateGnssBadge(fix);
@@ -490,6 +519,12 @@
     document.getElementById('tcpConfigSection').classList.toggle('hidden', settings.gnssSource !== 'gnssmaster');
     document.getElementById('tcpHost').value = settings.tcpHost || '127.0.0.1';
     document.getElementById('tcpPort').value = settings.tcpPort || '';
+    const tcpBadge = document.getElementById('tcpStatusBadge');
+    tcpBadge.textContent = GNSS.isTcpConnected() ? 'Conectado ✓' : 'Desconectado';
+    tcpBadge.classList.toggle('ok', GNSS.isTcpConnected());
+    const btBadge = document.getElementById('btStatusBadge');
+    btBadge.textContent = GNSS.isBluetoothConnected() ? 'Conectado ✓' : 'Desconectado';
+    btBadge.classList.toggle('ok', GNSS.isBluetoothConnected());
     refreshTileCount();
   }
   document.getElementById('cfgProject').addEventListener('change', e => { settings.projectName = e.target.value; Storage.saveSettings(settings); });
@@ -527,10 +562,15 @@
     settings.tcpHost = host;
     settings.tcpPort = port;
     Storage.saveSettings(settings);
+    const badge = document.getElementById('tcpStatusBadge');
+    badge.textContent = 'Conectando...';
+    badge.classList.remove('ok', 'err');
     try {
       await GNSS.connectTcp(host, port);
-      toast('Conectando ao GNSS Master...', 'success');
+      toast('Conectando ao GNSS Master...');
     } catch (e) {
+      badge.textContent = 'Falha: ' + (e.message || e);
+      badge.classList.add('err');
       toast('Falha ao conectar: ' + (e.message || e), 'error');
     }
   });

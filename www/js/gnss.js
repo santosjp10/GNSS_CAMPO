@@ -15,6 +15,10 @@ const GNSS = (() => {
   function on(cb) { listeners.push(cb); }
   function emit() { listeners.forEach(cb => cb(lastFix)); }
 
+  let statusListeners = [];
+  function onStatus(cb) { statusListeners.push(cb); }
+  function emitStatus(info) { statusListeners.forEach(cb => cb(info)); }
+
   function getLast() { return lastFix; }
   function getSource() { return source; }
   function isBluetoothConnected() { return btConnected; }
@@ -106,8 +110,9 @@ const GNSS = (() => {
         btConnected = true;
         nmeaBuffer = '';
         window.bluetoothSerial.subscribe('\n', onBtData, err => console.error('BT subscribe erro:', err));
+        emitStatus({ type: 'bluetooth', connected: true, error: null });
         resolve();
-      }, err => reject(err));
+      }, err => { emitStatus({ type: 'bluetooth', connected: false, error: String(err) }); reject(err); });
     });
   }
 
@@ -146,6 +151,7 @@ const GNSS = (() => {
       await plugin.addListener('tcpStatus', data => {
         tcpConnected = !!data.connected;
         if (!data.connected && data.error) console.warn('TCP GNSS Master:', data.error);
+        emitStatus({ type: 'gnssmaster', connected: tcpConnected, error: data.error || null });
       });
       tcpListenersAdded = true;
     }
@@ -185,17 +191,32 @@ const GNSS = (() => {
       const hdop = parseFloat(f[8]);
       const alt = parseFloat(f[9]);
       if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+        const prevVdop = lastFix?.vdop ?? null;
         lastFix = {
           lat, lng, alt: isNaN(alt) ? null : alt,
           accuracy: !isNaN(hdop) ? +(hdop * 3).toFixed(2) : null, // estimativa aproximada (HDOP x erro base 3m)
+          vAccuracy: prevVdop != null ? +(prevVdop * 3).toFixed(2) : null, // vem do GSA (VDOP), se já recebido
           altAccuracy: null, speed: lastFix?.speed ?? null, heading: lastFix?.heading ?? null,
           satellites: isNaN(sats) ? null : sats,
           fixQuality: isNaN(quality) ? null : quality,
           fixQualityLabel: FIX_QUALITY[quality] || '—',
           hdop: isNaN(hdop) ? null : hdop,
+          vdop: prevVdop,
+          pdop: lastFix?.pdop ?? null,
           source: fixSource || 'bluetooth',
           timestamp: Date.now()
         };
+        emit();
+      }
+    } else if (type === 'GSA' && f.length >= 18) {
+      // Campos finais da GSA: ..., PDOP, HDOP, VDOP (checksum já removido de "body")
+      const pdop = parseFloat(f[15]);
+      const hdop = parseFloat(f[16]);
+      const vdop = parseFloat(f[17]);
+      if (lastFix) {
+        if (!isNaN(pdop)) lastFix.pdop = pdop;
+        if (!isNaN(hdop)) { lastFix.hdop = hdop; lastFix.accuracy = +(hdop * 3).toFixed(2); }
+        if (!isNaN(vdop)) { lastFix.vdop = vdop; lastFix.vAccuracy = +(vdop * 3).toFixed(2); }
         emit();
       }
     } else if (type === 'RMC' && f.length >= 8) {
@@ -215,7 +236,7 @@ const GNSS = (() => {
   }
 
   return {
-    on, start, stop, getLast, getSource, isBluetoothConnected, isTcpConnected,
+    on, onStatus, start, stop, getLast, getSource, isBluetoothConnected, isTcpConnected,
     listPairedDevices, connectBluetooth, disconnectBluetooth, btAvailable,
     connectTcp, disconnectTcp, tcpAvailable,
     FIX_QUALITY

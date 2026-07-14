@@ -74,9 +74,14 @@ body{
 
 /* Live position box */
 .pos-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+.pos-grid.pos-grid-3{grid-template-columns:1fr 1fr 1fr;}
 .pos-box{background:var(--primary-light);border-radius:10px;padding:10px;text-align:center;}
-.pos-box .v{font-size:19px;font-weight:800;color:var(--primary-dark);font-variant-numeric:tabular-nums;}
-.pos-box .l{font-size:10.5px;color:var(--muted);font-weight:600;margin-top:2px;}
+.pos-box .v{font-size:17px;font-weight:800;color:var(--primary-dark);font-variant-numeric:tabular-nums;}
+.pos-box .l{font-size:10px;color:var(--muted);font-weight:600;margin-top:2px;}
+
+.conn-status-badge{margin-top:10px;text-align:center;font-size:12px;font-weight:700;padding:7px;border-radius:8px;background:var(--bg);color:var(--muted);}
+.conn-status-badge.ok{background:var(--primary-light);color:var(--primary-dark);}
+.conn-status-badge.err{background:var(--danger-light);color:var(--danger);}
 .coord-line{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;}
 .coord-line:last-child{border-bottom:none;}
 .coord-line .cl-label{color:var(--muted);}

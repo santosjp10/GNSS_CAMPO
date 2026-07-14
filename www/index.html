@@ -27,15 +27,17 @@
     </div>
 
     <div class="card">
-      <div class="pos-grid">
-        <div class="pos-box"><div class="v" id="posAccuracy">--</div><div class="l">Precisão (m)</div></div>
-        <div class="pos-box"><div class="v" id="posSats">--</div><div class="l">Satélites (uso/vista)</div></div>
+      <div class="pos-grid pos-grid-3">
+        <div class="pos-box"><div class="v" id="posAccuracy">--</div><div class="l">Horizontal (m)</div></div>
+        <div class="pos-box"><div class="v" id="posVAccuracy">--</div><div class="l">Vertical (m)</div></div>
+        <div class="pos-box"><div class="v" id="posSats">--</div><div class="l">Satélites</div></div>
       </div>
       <div class="coord-line"><span class="cl-label">Latitude</span><span class="cl-val" id="posLat">--</span></div>
       <div class="coord-line"><span class="cl-label">Longitude</span><span class="cl-val" id="posLng">--</span></div>
       <div class="coord-line"><span class="cl-label">UTM</span><span class="cl-val" id="posUtm">--</span></div>
       <div class="coord-line"><span class="cl-label">Altitude</span><span class="cl-val" id="posAlt">--</span></div>
       <div class="coord-line"><span class="cl-label">Fonte GNSS</span><span class="cl-val" id="posSource">GPS interno</span></div>
+      <div class="coord-line hidden" id="posDopRow"><span class="cl-label">HDOP / VDOP</span><span class="cl-val" id="posDop">--</span></div>
     </div>
 
     <!-- Linha / Polígono: resumo (sem lista completa — isso fica na aba Dados) -->
@@ -170,6 +172,7 @@
         </div>
         <button class="btn btn-outline btn-sm" id="btnBtScan">Buscar dispositivos pareados</button>
         <button class="btn btn-primary btn-sm" id="btnBtConnect" style="margin-top:8px">Conectar</button>
+        <div class="conn-status-badge" id="btStatusBadge">Desconectado</div>
       </div>
 
       <div class="switch-row">
@@ -186,6 +189,7 @@
           <input type="number" id="tcpPort" placeholder="Ex.: 11123">
         </div>
         <button class="btn btn-primary btn-sm" id="btnTcpConnect">Conectar ao GNSS Master</button>
+        <div class="conn-status-badge" id="tcpStatusBadge">Desconectado</div>
         <p style="font-size:11.5px;color:var(--muted);margin:10px 0 0;line-height:1.5;">
           No app <b>GNSS Master</b>: conecte seu receptor em <b>GNSS Receiver Connection</b> (USB Serial),
           depois em <b>Receiver Data Output</b> escolha <b>TCP Server</b>, defina uma porta e inicie.
